@@ -1,0 +1,74 @@
+#!/usr/bin/env python3
+
+import logging
+import os
+import argparse
+import subprocess
+
+import dendropy
+
+__version__ = '0.0.1-pre'
+
+parser = argparse.ArgumentParser(description='''--- taxonomy_slicer %s --- \na pipeline creating a new taxonomy with arbitrary levels and no reference to the usual taxonomy''' % __version__)
+parser.add_argument('-t', '--tree', help='rooted newick format tree file to partition', required=True)
+parser.add_argument('--debug', help='output debug information', action="store_true")
+
+args = parser.parse_args()
+
+if args.debug:
+    logging.basicConfig(level=logging.DEBUG)
+else:
+    logging.basicConfig(level=logging.INFO)
+
+num_levels = 3
+
+# Read tree file
+tree = dendropy.Tree.get(path=
+                         '/home/ben/git/tree2tax2/test/data/random.nwk', schema='newick')
+#args.tree, schema='newick')
+
+# Find the 95th percentile branch length
+branch_lengths = []
+for leaf in tree.leaf_node_iter():
+    branch_lengths.append(leaf.distance_from_root())
+branch_lengths = sorted(branch_lengths)
+
+# * Finds the 95th percentile of root to tip branch lengths
+if len(branch_lengths < 20):
+    raise Exception("Too few leaves detected")
+final_threshold = branch_lengths[int(0.95*len(branch_lengths))]
+logging.info("Found %i branch lengths, picking a threshold of %f" % (len(branch_lengths), final_threshold))
+
+# * Divides that branch length by 10
+branch_length_increment = final_threshold / num_levels
+logging.info("Using increment $f" % branch_length_increment)
+
+class TaxonomyAsTaxon:
+    def __init__(self, level, number):
+        self.level = level
+        self.number = number
+
+    def encode_as_string(self):
+        return "%i:%i" % self.level, self.number
+
+    @staticmethod
+    def decode(label):
+        splits = label.split(":")
+        if len(splits) != 2: raise Exception("taxon decode error")
+        return TaxonomyAsTaxon(int(splits[0]), int(splits[1]))
+
+
+# * Work down the tree in breadth first order, annotating nodes
+taxonomy_counters = {}
+for i in num_levels: taxonomy_counters[i] = 0
+for node in tree.level_order_node_iter():
+    # Unset the taxon if it was already set
+    # Work out what level this should be annotated to
+    # Work up until an annotated parent is found
+    # Find what level this node should be annotated to
+    # If same as last annotated parent, do nothing
+    # If different, add all levels that are missing as taxon objects
+
+
+
+# * Output new annotations for each leaf
