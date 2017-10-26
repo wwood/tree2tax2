@@ -66,7 +66,6 @@ class TaxonomyAsTaxon:
         for s in splits1:
             splits2 = s.split(":")
             if len(splits2) != 2:
-                import IPython; IPython.embed()
                 raise Exception("taxon decode error")
             self.levels.append(int(splits2[0]))
             self.numbers.append(int(splits2[1]))
@@ -103,7 +102,7 @@ for node in tree.levelorder_node_iter():
         continue
 
     # Unset the taxon if it was already set
-    node.taxon = None
+    node.label = None
 
     # Work out what level this should be annotated to
     distance_to_root = node.distance_from_root()
@@ -113,29 +112,29 @@ for node in tree.levelorder_node_iter():
     # Work up until an annotated parent is found
     if node.parent_node is None:
         label = TaxonomyAsTaxon.generate_label(taxonomy_counters, 0, 0)
-        node.taxon = dendropy.Taxon(label)
+        node.label = label
     else:
-        annotated_parent = node
-        while node.parent_node.taxon is None:
-            annotated_parent = node.parent_node
+        annotated_parent = node.parent_node
+        while annotated_parent.label is None:
+            annotated_parent = annotated_parent.parent_node
         last_annotated_tt = TaxonomyAsTaxon(annotated_parent.label)
         last_level = max(last_annotated_tt.levels)
         # If same as last annotated parent, do nothing
         # If different, add all levels that are missing as taxon objects
         if last_level < this_node_level:
-            node.taxon = TaxonomyAsTaxon.generate_label(
+            node.label = TaxonomyAsTaxon.generate_label(
                 taxonomy_counters, last_level+1, this_node_level)
 
 
 # * Output new annotations for each leaf
 for leaf in tree.leaf_node_iter():
     tax = []
-    n = leaf.parent
-    while not n.parent_node is not None:
-        if n.taxon is not None:
-            tax.append(TaxonomyAsTaxon(n.taxon.label))
-        n = n.parent
-    print("\t",join([
-        leaf.taxon.label,
+    n = leaf.parent_node
+    while n.parent_node is not None:
+        if n.label is not None:
+            tax.append(n.label)
+        n = n.parent_node
+    print("\t".join([
+        leaf.label,
         "; ".join(tax)
     ]))
