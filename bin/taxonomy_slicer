@@ -11,6 +11,8 @@ __version__ = '0.0.1-pre'
 
 parser = argparse.ArgumentParser(description='''--- taxonomy_slicer %s --- \na pipeline creating a new taxonomy with arbitrary levels and no reference to the usual taxonomy''' % __version__)
 parser.add_argument('-t', '--tree', help='rooted newick format tree file to partition', required=True)
+parser.add_argument('-n', '--num_levels', help='number of levels to sub-divide the branches into (approximately)', required=True, type=int)
+parser.add_argument('-f', '--fraction', help='fraction of tip levels that get divided into levels', type=float, default=0.95)
 parser.add_argument('--debug', help='output debug information', action="store_true")
 
 args = parser.parse_args()
@@ -20,12 +22,12 @@ if args.debug:
 else:
     logging.basicConfig(level=logging.INFO)
 
-num_levels = 3
+num_levels = args.num_levels
+tree = args.tree
+fraction = args.fraction
 
 # Read tree file
-tree = dendropy.Tree.get(path=
-                         #'/home/ben/git/tree2tax2/test/data/random.nwk', schema='newick')
-                         args.tree, schema='newick')
+tree = dendropy.Tree.get(path=tree, schema='newick')
 
 # Find the 95th percentile branch length
 branch_lengths = []
@@ -36,7 +38,7 @@ branch_lengths = sorted(branch_lengths)
 # * Finds the 95th percentile of root to tip branch lengths
 if len(branch_lengths) < 4:
     raise Exception("Too few leaves detected")
-final_threshold = branch_lengths[int(0.95*len(branch_lengths))]
+final_threshold = branch_lengths[int(fraction*len(branch_lengths))]
 logging.info("Found %i branch lengths, picking a threshold of %f" % (len(branch_lengths), final_threshold))
 
 # * Divides that branch length by 10
@@ -48,11 +50,14 @@ logging.info("Using increment %f" % branch_length_increment)
 class TaxonomyCounters:
     def __init__(self, num_levels):
         self.taxonomy_counters = {}
-        for i in range(num_levels):
-            self.taxonomy_counters[i] = 0
 
     def next_at_level(self, level):
-        n = self.taxonomy_counters[level]
+        try:
+            n = self.taxonomy_counters[level]
+        except KeyError:
+            self.taxonomy_counters[level] = 0
+            n=0
+
         self.taxonomy_counters[level] += 1
         return n
 
@@ -128,13 +133,17 @@ for node in tree.levelorder_node_iter():
 
 # * Output new annotations for each leaf
 for leaf in tree.leaf_node_iter():
-    tax = []
+    tax = ['Root']
     n = leaf.parent_node
     while n.parent_node is not None:
         if n.label is not None:
             tax.append(n.label)
         n = n.parent_node
+
+    leaf_name = leaf.label
+    if leaf_name is None:
+        leaf_name = leaf.taxon.label
     print("\t".join([
-        leaf.label,
+        leaf_name,
         "; ".join(tax)
     ]))
