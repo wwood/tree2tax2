@@ -24,8 +24,8 @@ num_levels = 3
 
 # Read tree file
 tree = dendropy.Tree.get(path=
-                         '/home/ben/git/tree2tax2/test/data/random.nwk', schema='newick')
-#args.tree, schema='newick')
+                         #'/home/ben/git/tree2tax2/test/data/random.nwk', schema='newick')
+                         args.tree, schema='newick')
 
 # Find the 95th percentile branch length
 branch_lengths = []
@@ -34,41 +34,108 @@ for leaf in tree.leaf_node_iter():
 branch_lengths = sorted(branch_lengths)
 
 # * Finds the 95th percentile of root to tip branch lengths
-if len(branch_lengths < 20):
+if len(branch_lengths) < 4:
     raise Exception("Too few leaves detected")
 final_threshold = branch_lengths[int(0.95*len(branch_lengths))]
 logging.info("Found %i branch lengths, picking a threshold of %f" % (len(branch_lengths), final_threshold))
 
 # * Divides that branch length by 10
 branch_length_increment = final_threshold / num_levels
-logging.info("Using increment $f" % branch_length_increment)
+logging.info("Using increment %f" % branch_length_increment)
+
+
+
+class TaxonomyCounters:
+    def __init__(self, num_levels):
+        self.taxonomy_counters = {}
+        for i in range(num_levels):
+            self.taxonomy_counters[i] = 0
+
+    def next_at_level(self, level):
+        n = self.taxonomy_counters[level]
+        self.taxonomy_counters[level] += 1
+        return n
+
 
 class TaxonomyAsTaxon:
-    def __init__(self, level, number):
-        self.level = level
-        self.number = number
-
-    def encode_as_string(self):
-        return "%i:%i" % self.level, self.number
+    def __init__(self, label):
+        splits1 = label.split("; ")
+        self.label = label
+        self.levels = []
+        self.numbers = []
+        for s in splits1:
+            splits2 = s.split(":")
+            if len(splits2) != 2:
+                import IPython; IPython.embed()
+                raise Exception("taxon decode error")
+            self.levels.append(int(splits2[0]))
+            self.numbers.append(int(splits2[1]))
 
     @staticmethod
-    def decode(label):
-        splits = label.split(":")
-        if len(splits) != 2: raise Exception("taxon decode error")
-        return TaxonomyAsTaxon(int(splits[0]), int(splits[1]))
+    def generate_label(counters, start_level, last_level):
+        if last_level < start_level: raise Exception()
+        levels = []
+        numbers = []
+        i = start_level
+        while i <= last_level:
+            levels.append(i)
+            numbers.append(counters.next_at_level(i))
+            i += 1
+
+        s = []
+        for i, l in enumerate(levels):
+            ss = "%i:%i" % (l,numbers[i])
+            s.append(ss)
+        return "; ".join(s)
+
+    # @staticmethod
+    # def generate(counters, start_level, last_level):
+    #     return TaxonomyAsTaxon(
+    #         TaxonomyAsTaxon.generate_label(
+    #             counters, start_level, last_level))
+
 
 
 # * Work down the tree in breadth first order, annotating nodes
-taxonomy_counters = {}
-for i in num_levels: taxonomy_counters[i] = 0
-for node in tree.level_order_node_iter():
-    # Unset the taxon if it was already set
-    # Work out what level this should be annotated to
-    # Work up until an annotated parent is found
-    # Find what level this node should be annotated to
-    # If same as last annotated parent, do nothing
-    # If different, add all levels that are missing as taxon objects
+taxonomy_counters = TaxonomyCounters(num_levels)
+for node in tree.levelorder_node_iter():
+    if node.is_leaf(): # Do not annotate leaf nodes
+        continue
 
+    # Unset the taxon if it was already set
+    node.taxon = None
+
+    # Work out what level this should be annotated to
+    distance_to_root = node.distance_from_root()
+    this_node_level = int(distance_to_root / branch_length_increment)
+    logging.debug("Annotating this node at level %i" % this_node_level)
+
+    # Work up until an annotated parent is found
+    if node.parent_node is None:
+        label = TaxonomyAsTaxon.generate_label(taxonomy_counters, 0, 0)
+        node.taxon = dendropy.Taxon(label)
+    else:
+        annotated_parent = node
+        while node.parent_node.taxon is None:
+            annotated_parent = node.parent_node
+        last_annotated_tt = TaxonomyAsTaxon(annotated_parent.label)
+        last_level = max(last_annotated_tt.levels)
+        # If same as last annotated parent, do nothing
+        # If different, add all levels that are missing as taxon objects
+        if last_level < this_node_level:
+            node.taxon = TaxonomyAsTaxon.generate_label(
+                taxonomy_counters, last_level+1, this_node_level)
 
 
 # * Output new annotations for each leaf
+for leaf in tree.leaf_node_iter():
+    tax = []
+    n = leaf.parent
+    while not n.parent_node is not None:
+        if n.taxon is not None:
+            tax.append(TaxonomyAsTaxon(n.taxon.label))
+        n = n.parent
+    print("\t",join([
+        leaf.taxon.label,
+        "; ".join(tax)
+    ]))
