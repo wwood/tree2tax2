@@ -92,12 +92,6 @@ class TaxonomyAsTaxon:
             s.append(ss)
         return "; ".join(s)
 
-    # @staticmethod
-    # def generate(counters, start_level, last_level):
-    #     return TaxonomyAsTaxon(
-    #         TaxonomyAsTaxon.generate_label(
-    #             counters, start_level, last_level))
-
 
 
 # * Work down the tree in breadth first order, annotating nodes
@@ -107,6 +101,7 @@ for node in tree.levelorder_node_iter():
         continue
 
     # Unset the taxon if it was already set
+    logging.debug("start: %s" % node.label)
     node.label = None
 
     # Work out what level this should be annotated to
@@ -129,6 +124,7 @@ for node in tree.levelorder_node_iter():
         if last_level < this_node_level:
             node.label = TaxonomyAsTaxon.generate_label(
                 taxonomy_counters, last_level+1, this_node_level)
+            logging.debug("Annotating node as %s" % node.label)
 
 
 # * Output new annotations for each leaf
@@ -137,7 +133,7 @@ for leaf in tree.leaf_node_iter():
     n = leaf.parent_node
     while n.parent_node is not None:
         if n.label is not None:
-            tax.append(n.label)
+            tax.insert(1,n.label)
         n = n.parent_node
 
     leaf_name = leaf.label
